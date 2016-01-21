@@ -56,6 +56,9 @@ String.prototype.rtrim = function() {
 firmware = '';
 var svgscale = 0;
 
+var gcodePreamble = [];
+var gcodePostamble = [];
+
 $(document).ready(function() {
 
 	// Tooltips
@@ -153,6 +156,121 @@ $(document).ready(function() {
 		console.log(localSettings);
 	});
 
+		// handle preset changes
+		$('#selectPreset').on('change', function(e) {
+			console.log('Select Preset');
+			defaultSlicer = 'machines';
+			if ($('#selectPreset').val() > 0) {
+				// this is a valid preset
+				var preset = localSettings[defaultSlicer][Number($('#selectPreset').val())-1].opts;
+				for (c in preset) {
+					// update values
+					$('[name="slOptsArray-'+preset[c].o+'"]').val(preset[c].v);
+				}
+
+				// reset changed options color to black
+				$('[name|="slOptsArray"]').css('color','black');
+
+				// enable Delete Preset
+				$('#deletePreset').removeClass('disabled');
+
+			} else {
+				// disable Delete Preset
+				$('#deletePreset').addClass('disabled');
+			}
+		});
+
+		// create new preset
+			$('#newPreset').on('click', function() {
+
+				if ($('#newPresetName').val() == '') {
+					alert('You must type a name for a preset to save it.');
+					return;
+				}
+
+				var opts = [];
+				jQuery.each($('[name|="slOptsArray"]').serializeArray(), function( c, field ) {
+					field.name = field.name.slice(12);
+					//console.log(field.name, field.value);
+					opts.push({o:field.name, v:field.value});
+				});
+
+				socket.emit('savePreset', {'default':'machines', 'name': $('#newPresetName').val(), 'opts': opts, isNew:true});
+
+				// clear field
+				$('#newPresetName').val('');
+
+				// reset changed options color to black
+				$('[name|="slOptsArray"]').css('color','black');
+
+			});
+
+			// update selected preset
+	$('#updatePreset').on('click', function() {
+
+		if ($('#selectPreset option:selected').val() == 0) {
+			// this is the slicer presets option, can't be updated
+			alert('select a preset to update first');
+		}
+
+		var opts = [];
+		jQuery.each($('[name|="slOptsArray"]').serializeArray(), function( c, field ) {
+			field.name = field.name.slice(12);
+			//console.log(field.name, field.value);
+			opts.push({o:field.name, v:field.value});
+		});
+
+		socket.emit('savePreset', {'default':'machines', 'name': $('#selectPreset :selected').html(), 'opts': opts, isNew:false});
+
+		// reset changed options color to black
+		$('[name|="slOptsArray"]').css('color','black');
+
+		// disable Update Preset
+		$('#updatePreset').addClass('disabled');
+
+	});
+
+
+	// handle preset changes
+		$('#selectPreset').on('change', function(e) {
+
+			if ($('#selectPreset').val() > 0) {
+				// this is a valid preset
+				var preset = localSettings['machines'][Number($('#selectPreset').val())-1].opts;
+				for (c in preset) {
+					// update values
+					//$('[name="slOptsArray-'+preset[c].o+'"]').val(preset[c].v);
+					console.log(preset[c]);
+				}
+
+				// reset changed options color to black
+				$('[name|="slOptsArray"]').css('color','black');
+
+				// enable Delete Preset
+				$('#deletePreset').removeClass('disabled');
+
+			} else {
+				// disable Delete Preset
+				$('#deletePreset').addClass('disabled');
+			}
+		});
+
+		// delete selected preset
+	$('#deletePreset').on('click', function() {
+
+		if ($('#selectPreset option:selected').val() == 0) {
+			// this is the slicer presets option, can't be updated
+			alert('select a preset to delete first');
+		}
+
+		socket.emit('deletePreset', {'default':'machines', 'name': $('#selectPreset :selected').html()});
+
+		// disable Update and Delete Preset
+		$('#updatePreset').addClass('disabled');
+		$('#deletePreset').addClass('disabled');
+
+	});
+
 
 	function loadMachineSettings(exists) {
 		// {"machine":[{"name":"Freeburn2","opts":[{"o":"laserxmax","v":"600"},{"o":"laserymax","v":"400"},{"o":"startgcode","v":"\nG91\nG21"},{"o":"endgcode","v":""},{"o":"laseron","v":"M03"},{"o":"laseroff","v":"M5"},{"o":"Laser0","v":"0"},{"o":"laser100","v":"255"},{"o":"button1","v":"M106"}]}]}
@@ -161,7 +279,7 @@ $(document).ready(function() {
 			$('#selectPreset').append('<option value="'+(Number(c)+Number(1))+'">'+localSettings['machines'][c].name+'</option>');
 		}
 
-		//console.log('exists: '+exists);
+		console.log('exists: '+exists);
 
 		if (exists == -2) {
 			// select newly created preset (last as it was added)
@@ -289,8 +407,11 @@ $(document).ready(function() {
 		if (webgl) {
 			$('#updateGit').click(); // Check for updates on startup - very nb - I add code to Laserweb so often!
 		};
-		laserxmax = data.xmax
-		laserymax = data.ymax
+		laserxmax = data.xmax;
+		laserymax = data.ymax;
+
+		gcodePreamble = data.gcodePreamble;
+		gcodePostamble = data.gcodePostamble;
 
 		// Enable Webcam if found
 		if (data.showWebCam == true) {
@@ -2279,6 +2400,15 @@ function processSVG() {
 	SVGlaserRapid = $('#SVGrapidRate').val();
 	SVGlaserPwr = $('#SVGlaserPwr').val();
 	SVGlaserScale = svgscale * ($('#SVGscaleval').val() / 100);
-	document.getElementById("gcodepreview").value = svg2gcode(svg, { feedRate: SVGlaserFeed, seekRate: SVGlaserRapid, bitWidth: 0.1, scale: SVGlaserScale, safeZ: 0.01, laserpwr: SVGlaserPwr });
+	document.getElementById("gcodepreview").value = svg2gcode(svg, {
+		feedRate: SVGlaserFeed,
+		seekRate: SVGlaserRapid,
+		bitWidth: 0.1,
+		scale: SVGlaserScale,
+		safeZ: 0.01,
+		laserpwr: SVGlaserPwr,
+		gcodePreamble: gcodePreamble,
+		gcodePostamble: gcodePostamble
+	});
 	gCodeToSend = document.getElementById('gcodepreview').value;
 };
