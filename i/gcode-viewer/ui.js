@@ -18,8 +18,8 @@ var added = false;
 
 
 // Specific to your machine
-var laserxmax = 600
-var laserymax = 400
+var laserxmax = 1220
+var laserymax = 610
 var lineincrement = 50
 
 
